@@ -1,0 +1,278 @@
+<!doctype html>
+<html>
+<head>
+  <title>Task: __placeholder_task_name__</title>
+  <style>
+    html, body { margin: 0; padding: 5px 10px; }
+    h1 { padding: 0; margin: 0; }
+    ul { padding: 0 20px; list-style: none; }
+    li { line-height: 1.3em; }
+    li input { vertical-align: middle; }
+    li span { line-height: 1.3em; }
+    li button { border: 1px solid transparent; background: none; cursor: pointer; display: none; }
+    li:hover button:not(.hidden) { display: inline-block; }
+    .hidden { display: none; }
+    #progress { width: 200px; height: 5px; margin: 25px 20px; }
+    #progress > div { width: 100%; height: 100% }
+    #progress .todo { height: 100%; display: inline-block; background: #ffaa06 }
+    #progress .completed { height: 100%; display: inline-block; background: limegreen }
+  </style>
+</head>
+<body>
+  <h1>Task: __placeholder__task_name__ </h1>
+  <div id="root">
+    <div id="progress"></div>
+    <ul></ul>
+  </div>
+  <button id="add-task-btn">New task</button>
+  <script>
+    const root = document.querySelector('#root')
+    const list = document.querySelector('#root > ul')
+    const progress = document.querySelector('#progress')
+    const _ = null
+
+    e('style', { type: 'text/css' }, { parent: document.head, onInit: (style) => {
+      style.innerHTML = [...Array(100).keys()].map(n => `.progress-percent-${n + 1} { width: ${n + 1}% }`).join('\n')
+    }})
+
+    let tasks = getTasks()
+    let renderedTasks
+    let renderedProgress
+
+    render()
+
+    function render() {
+      if (renderedTasks) renderedTasks.forEach(t => t.remove())
+      renderedTasks = tasks.map(task => TaskView(list, task))
+      if (renderedProgress) renderedProgress.remove()
+      renderedProgress = ProgressView()
+    }
+
+    function getTasks() {
+      try { return JSON.parse(localStorage.getItem('tasks') || '[]') } catch (error) { console.error(error) }
+      return []
+    }
+
+    function setTasks(newTasks) {
+      localStorage.setItem('tasks', JSON.stringify(newTasks))
+    }
+
+    function dispatch(type, event, args) {
+      switch (type) {
+        case 'CREATE_TASK': {
+            const { name } = args
+            setTasks([...tasks, { name, checked: false, subtasks: [] }])
+          }
+          break
+        case 'CREATE_SUBTASK': {
+            const { task, name } = args
+            setTasks(tasks.map(t => ({ ...t, subtasks: t.name === task.name ? [...t.subtasks, { name, checked: false }] : t.subtasks })))
+          }
+          break
+        case 'REMOVE_TASK': {
+            const { task } = args
+            setTasks(tasks.filter(t => t.name !== task.name))
+          }
+          break
+        case 'UPDATE_TASK_NAME': {
+            const { task, name } = args
+            setTasks(tasks.map(t => ({ ...t, name: t.name === task.name ? name : t.name })))
+          }
+          break
+        case 'TASK_CHECKBOX_CHANGE': {
+            const { task } = args
+            setTasks(tasks.map(t => ({ ...t, checked: t.name === task.name ? event.target.checked : t.checked })))
+          }
+          break
+        case 'SUBTASK_CHECKBOX_CHANGE': {
+            const { task, subtask } = args
+            setTasks(tasks.map(t => {
+              if (t.name !== task.name) return t
+              const subtasks = t.subtasks.map(s => {
+                if (s.name !== subtask.name) return s
+                const checked = event.target.checked
+                return { ...s, checked: checked }
+              })
+              return { ...t, subtasks: subtasks }
+            }))
+          }
+          break
+        default:
+          throw new Error(`unknown event type ${type}`)
+      }
+      tasks = getTasks()
+      render()
+    }
+
+    function ProgressView() {
+      const stats = tasks.reduce((acc, task) => {
+        if (task.subtasks && task.subtasks.length) {
+          acc.total += task.subtasks.length
+          task.subtasks.forEach(s => s.checked ? acc.completed++ : acc.todo++)
+          return acc
+        }
+        acc.total++
+        task.checked ? acc.completed++ : acc.todo++
+        return acc
+      }, { total: 0, completed: 0, todo: 0 })
+      const todo = Math.round(stats.todo * 100 / stats.total)
+      const completed = Math.round(stats.completed * 100 / stats.total)
+      return (
+        e('div', _, { parent: progress }, [
+          e('span', { class: `progress-percent-${completed} completed` }),
+          e('span', { class: `progress-percent-${todo} todo` })
+        ])
+      )
+    }
+
+    function TaskView(parent, task) {
+      let subtaskListRef
+      let view = (
+        e('li', _, { parent }, [
+          e('label', _, _, [
+            e('input', { type: 'checkbox' }, { onInit: (checkbox) => {
+              if (task.checked) checkbox.setAttribute('checked', true)
+              checkbox.onchange = (event) => dispatch('TASK_CHECKBOX_CHANGE', event, { task })
+            }}),
+            e('span', _, { onInit: (span) => span.textContent = task.name })
+          ]),
+          e('button', _, { onInit: (button) => {
+            button.innerHTML = '➕'
+            button.onclick = function () {
+              if (!subtaskListRef) {
+                subtaskListRef = e('ul')
+              }
+
+              let inputRef
+              e('input', { type: 'text' }, { parent: subtaskListRef, onInit: (input) => {
+                inputRef = input
+                input.onkeydown = function (event) {
+                  if (event.key === 'Enter' && input.value) {
+                    dispatch('CREATE_SUBTASK', event, { task, name: input.value })
+                  }
+                  if (event.key === 'Escape') {
+                    input.remove()
+                  }
+                }
+              }})
+
+              inputRef.focus()
+            }
+          }}),
+          e('button', _, { onInit: (button) => {
+            button.innerHTML = '🗑'
+            button.onclick = function (event) {
+              if (confirm(`Are you sure you want to delete ${task.name}`)) {
+                dispatch('REMOVE_TASK', event, { task })
+              }
+            }
+          }}),
+          e('button', _, { onInit: (button) => {
+            button.innerHTML = '✏️'
+            button.onclick = function (event) {
+              let inputRef
+              e('input', { type: 'text' }, { parent: view, onInit: (input) => {
+                inputRef = input
+                input.value = task.name
+
+                const childElements = view.querySelectorAll(':scope > *:not(input[type="text"])')
+                hideElements(childElements)
+
+                input.onkeydown = function (event) {
+                  if (event.key === 'Enter' && input.value) {
+                    dispatch('UPDATE_TASK_NAME', event, { task, name: input.value })
+                  }
+                  if (event.key === 'Escape') {
+                    showElements(childElements)
+                    input.remove()
+                  }
+                }
+              }})
+
+              inputRef.focus()
+            }
+          }}),
+          e('ul', _, { onInit: (ul) => subtaskListRef = ul }, (task.subtasks && task.subtasks.length) && [
+            ...task.subtasks.map(subtask => SubtaskView(subtaskListRef, task, subtask))
+          ])
+        ])
+      )
+
+      return view
+    }
+
+    function EditableTaskView(parent) {
+      let inputRef
+      let listItemRef
+      const view = (
+        e('li', _, { parent, onInit: (listItem) => { listItemRef = listItem } }, [
+          e('input', { type: 'text' }, { onInit: (input) => {
+            inputRef = input
+            input.onkeydown = function (event) {
+              if (event.key === 'Escape' && !input.value) {
+                listItemRef.remove()
+                return
+              }
+              if (event.key === 'Enter' && input.value) {
+                listItemRef.remove()
+                dispatch('CREATE_TASK', event, { name: input.value })
+              }
+            }
+          }})
+        ])
+      )
+
+      inputRef.focus()
+
+      return view
+    }
+
+    function SubtaskView(parent, task, subtask) {
+      return (
+        e('li', _, { parent }, [
+          e('label', _, _, [
+            e('input', { type: 'checkbox' }, { onInit: (checkbox) => {
+              if (subtask.checked) checkbox.setAttribute('checked', true)
+              checkbox.onchange = (event) => dispatch('SUBTASK_CHECKBOX_CHANGE', event, { task, subtask })
+            }}),
+            e('span', _, { onInit: (el) => { el.textContent = subtask.name }}),
+          ])
+        ])
+      )
+    }
+
+    function e(elType, attributes, options, children) {
+      const element = document.createElement(elType)
+      if (attributes) {
+        for (const [name, value] of Object.entries(attributes)) {
+          element.setAttribute(name, value)
+        }
+      }
+      if (options) {
+        if (options.onInit) options.onInit(element)
+      }
+      if (children && children.length) {
+        children.forEach(childElement=> element.appendChild(childElement))
+      }
+      if (options) {
+        if (options.parent) {
+          options.parent.appendChild(element)
+        }
+      }
+      return element
+    }
+
+    function showElements(elements) {
+      elements.forEach(e => e.classList.remove('hidden'))
+    }
+
+    function hideElements(elements) {
+      elements.forEach(e => e.classList.add('hidden'))
+    }
+
+    document.querySelector('#add-task-btn').onclick = function () {
+      EditableTaskView(list)
+    }
+  </script>
+</body>
+</html>
