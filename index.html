@@ -21,13 +21,14 @@
   </style>
 </head>
 <body>
-  <h1>Task: __placeholder__task_name__ </h1>
+  <h1>Task: __placeholder_task_name__</h1>
   <div id="root">
     <div id="progress"></div>
     <ul></ul>
   </div>
   <button id="add-task-btn">New task</button>
   <script>
+    const taskName = '__placeholder_task_name__'
     const root = document.querySelector('#root')
     const list = document.querySelector('#root > ul')
     const progress = document.querySelector('#progress')
@@ -50,13 +51,26 @@
       renderedProgress = ProgressView()
     }
 
+    function getTaskGroups() {
+      try {
+        const taskGroups = JSON.parse(localStorage.getItem('tasks') || `{}`)
+        if (!taskGroups[taskName]) taskGroups[taskName] = []
+        return taskGroups
+      } catch (error) {
+        console.error(error)
+      }
+      return {[taskName]: []}
+    }
+
     function getTasks() {
-      try { return JSON.parse(localStorage.getItem('tasks') || '[]') } catch (error) { console.error(error) }
-      return []
+      const taskGroups = getTaskGroups()
+      return taskGroups[taskName]
     }
 
     function setTasks(newTasks) {
-      localStorage.setItem('tasks', JSON.stringify(newTasks))
+      const taskGroups = getTaskGroups()
+      taskGroups[taskName] = newTasks
+      localStorage.setItem('tasks', JSON.stringify(taskGroups))
     }
 
     function taskExists(name) {
