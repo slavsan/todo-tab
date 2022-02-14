@@ -10,7 +10,7 @@
     li input { vertical-align: middle; }
     li span { line-height: 1.3em; }
     li button { border: 1px solid transparent; background: none; cursor: pointer; display: none; }
-    li:hover button:not(.hidden) { display: inline-block; }
+    li > div:hover button:not(.hidden) { display: inline-block; }
     .hidden { display: none; }
     #progress { width: 200px; height: 5px; margin: 25px 20px; }
     #progress > div { width: 100%; height: 100% }
@@ -74,9 +74,34 @@
             setTasks(tasks.filter(t => t.name !== task.name))
           }
           break
+        case 'REMOVE_SUBTASK': {
+            const { task, subtask } = args
+            setTasks(tasks.map(t => {
+              if (t.name !== task.name) return t
+              return {
+                ...t,
+                subtasks: t.subtasks.filter(s => s.name !== subtask.name)
+              }
+            }))
+          }
+          break
         case 'UPDATE_TASK_NAME': {
             const { task, name } = args
             setTasks(tasks.map(t => ({ ...t, name: t.name === task.name ? name : t.name })))
+          }
+          break
+        case 'UPDATE_SUBTASK_NAME': {
+            const { task, subtask, name } = args
+            setTasks(tasks.map(t => {
+              if (t.name !== task.name) return t
+              return {
+                ...t,
+                subtasks: t.subtasks.map(s => {
+                  if (s.name !== subtask.name) return s
+                  return { ...s, name }
+                })
+              }
+            }))
           }
           break
         case 'TASK_CHECKBOX_CHANGE': {
@@ -88,12 +113,14 @@
             const { task, subtask } = args
             setTasks(tasks.map(t => {
               if (t.name !== task.name) return t
-              const subtasks = t.subtasks.map(s => {
-                if (s.name !== subtask.name) return s
-                const checked = event.target.checked
-                return { ...s, checked: checked }
-              })
-              return { ...t, subtasks: subtasks }
+              return {
+                ...t,
+                subtasks: t.subtasks.map(s => {
+                  if (s.name !== subtask.name) return s
+                  const checked = event.target.checked
+                  return { ...s, checked: checked }
+                })
+              }
             }))
           }
           break
@@ -129,69 +156,71 @@
       let subtaskListRef
       let view = (
         e('li', _, { parent }, [
-          e('label', _, _, [
-            e('input', { type: 'checkbox' }, { onInit: (checkbox) => {
-              if (task.checked) checkbox.setAttribute('checked', true)
-              checkbox.onchange = (event) => dispatch('TASK_CHECKBOX_CHANGE', event, { task })
+          e('div', _, _, [
+            e('label', _, _, [
+              e('input', { type: 'checkbox' }, { onInit: (checkbox) => {
+                if (task.checked) checkbox.setAttribute('checked', true)
+                checkbox.onchange = (event) => dispatch('TASK_CHECKBOX_CHANGE', event, { task })
+              }}),
+              e('span', _, { onInit: (span) => span.textContent = task.name })
+            ]),
+            e('button', _, { onInit: (button) => {
+              button.innerHTML = '➕'
+              button.onclick = function () {
+                if (!subtaskListRef) {
+                  subtaskListRef = e('ul')
+                }
+
+                let inputRef
+                e('input', { type: 'text' }, { parent: subtaskListRef, onInit: (input) => {
+                  inputRef = input
+                  input.onkeydown = function (event) {
+                    if (event.key === 'Enter' && input.value) {
+                      dispatch('CREATE_SUBTASK', event, { task, name: input.value })
+                    }
+                    if (event.key === 'Escape') {
+                      input.remove()
+                    }
+                  }
+                }})
+
+                inputRef.focus()
+              }
             }}),
-            e('span', _, { onInit: (span) => span.textContent = task.name })
+            e('button', _, { onInit: (button) => {
+              button.innerHTML = '🗑'
+              button.onclick = function (event) {
+                if (confirm(`Are you sure you want to delete ${task.name}`)) {
+                  dispatch('REMOVE_TASK', event, { task })
+                }
+              }
+            }}),
+            e('button', _, { onInit: (button) => {
+              button.innerHTML = '✏️'
+              button.onclick = function (event) {
+                let inputRef
+                e('input', { type: 'text' }, { parent: view, onInit: (input) => {
+                  inputRef = input
+                  input.value = task.name
+
+                  const childElements = view.querySelectorAll(':scope > *:not(input[type="text"])')
+                  hideElements(childElements)
+
+                  input.onkeydown = function (event) {
+                    if (event.key === 'Enter' && input.value) {
+                      dispatch('UPDATE_TASK_NAME', event, { task, name: input.value })
+                    }
+                    if (event.key === 'Escape') {
+                      showElements(childElements)
+                      input.remove()
+                    }
+                  }
+                }})
+
+                inputRef.focus()
+              }
+            }}),
           ]),
-          e('button', _, { onInit: (button) => {
-            button.innerHTML = '➕'
-            button.onclick = function () {
-              if (!subtaskListRef) {
-                subtaskListRef = e('ul')
-              }
-
-              let inputRef
-              e('input', { type: 'text' }, { parent: subtaskListRef, onInit: (input) => {
-                inputRef = input
-                input.onkeydown = function (event) {
-                  if (event.key === 'Enter' && input.value) {
-                    dispatch('CREATE_SUBTASK', event, { task, name: input.value })
-                  }
-                  if (event.key === 'Escape') {
-                    input.remove()
-                  }
-                }
-              }})
-
-              inputRef.focus()
-            }
-          }}),
-          e('button', _, { onInit: (button) => {
-            button.innerHTML = '🗑'
-            button.onclick = function (event) {
-              if (confirm(`Are you sure you want to delete ${task.name}`)) {
-                dispatch('REMOVE_TASK', event, { task })
-              }
-            }
-          }}),
-          e('button', _, { onInit: (button) => {
-            button.innerHTML = '✏️'
-            button.onclick = function (event) {
-              let inputRef
-              e('input', { type: 'text' }, { parent: view, onInit: (input) => {
-                inputRef = input
-                input.value = task.name
-
-                const childElements = view.querySelectorAll(':scope > *:not(input[type="text"])')
-                hideElements(childElements)
-
-                input.onkeydown = function (event) {
-                  if (event.key === 'Enter' && input.value) {
-                    dispatch('UPDATE_TASK_NAME', event, { task, name: input.value })
-                  }
-                  if (event.key === 'Escape') {
-                    showElements(childElements)
-                    input.remove()
-                  }
-                }
-              }})
-
-              inputRef.focus()
-            }
-          }}),
           e('ul', _, { onInit: (ul) => subtaskListRef = ul }, (task.subtasks && task.subtasks.length) && [
             ...task.subtasks.map(subtask => SubtaskView(subtaskListRef, task, subtask))
           ])
@@ -228,17 +257,54 @@
     }
 
     function SubtaskView(parent, task, subtask) {
-      return (
+      const view = (
         e('li', _, { parent }, [
-          e('label', _, _, [
-            e('input', { type: 'checkbox' }, { onInit: (checkbox) => {
-              if (subtask.checked) checkbox.setAttribute('checked', true)
-              checkbox.onchange = (event) => dispatch('SUBTASK_CHECKBOX_CHANGE', event, { task, subtask })
+          e('div', _, _, [
+            e('label', _, _, [
+              e('input', { type: 'checkbox' }, { onInit: (checkbox) => {
+                if (subtask.checked) checkbox.setAttribute('checked', true)
+                checkbox.onchange = (event) => dispatch('SUBTASK_CHECKBOX_CHANGE', event, { task, subtask })
+              }}),
+              e('span', _, { onInit: (el) => { el.textContent = subtask.name }}),
+            ]),
+            e('button', _, { onInit: (button) => {
+              button.innerHTML = '🗑'
+              button.onclick = function (event) {
+                if (confirm(`Are you sure you want to delete ${subtask.name}`)) {
+                  dispatch('REMOVE_SUBTASK', event, { task, subtask })
+                }
+              }
             }}),
-            e('span', _, { onInit: (el) => { el.textContent = subtask.name }}),
+            e('button', _, { onInit: (button) => {
+              button.innerHTML = '✏️'
+              button.onclick = function (event) {
+                let inputRef
+                e('input', { type: 'text' }, { parent: view, onInit: (input) => {
+                  inputRef = input
+                  input.value = subtask.name
+
+                  const childElements = view.querySelectorAll(':scope > *:not(input[type="text"])')
+                  hideElements(childElements)
+
+                  input.onkeydown = function (event) {
+                    if (event.key === 'Enter' && input.value) {
+                      dispatch('UPDATE_SUBTASK_NAME', event, { task, subtask, name: input.value })
+                    }
+                    if (event.key === 'Escape') {
+                      showElements(childElements)
+                      input.remove()
+                    }
+                  }
+                }})
+
+                inputRef.focus()
+              }
+            }}),
+
           ])
         ])
       )
+      return view
     }
 
     function e(elType, attributes, options, children) {
