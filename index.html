@@ -9,7 +9,9 @@
     li { line-height: 1.3em; }
     li input { vertical-align: middle; }
     li span { line-height: 1.3em; }
-    li button { border: 1px solid transparent; background: none; cursor: pointer; display: none; }
+    li button { border: 1px solid transparent; background: none; cursor: pointer; display: none;}
+    li button { line-height: 1.5; font-size: 0.6em; vertical-align: middle; }
+    li label { margin-right: 10px; }
     li > div:hover button:not(.hidden) { display: inline-block; }
     .hidden { display: none; }
     #progress { width: 200px; height: 5px; margin: 25px 20px; }
@@ -55,6 +57,14 @@
 
     function setTasks(newTasks) {
       localStorage.setItem('tasks', JSON.stringify(newTasks))
+    }
+
+    function taskExists(name) {
+      return Boolean(tasks.find(t => t.name === name))
+    }
+
+    function subtaskExists(task, name) {
+      return Boolean(task.subtasks.find(s => s.name === name))
     }
 
     function dispatch(type, event, args) {
@@ -176,6 +186,7 @@
                   inputRef = input
                   input.onkeydown = function (event) {
                     if (event.key === 'Enter' && input.value) {
+                      if (subtaskExists(task, input.value)) return
                       dispatch('CREATE_SUBTASK', event, { task, name: input.value })
                     }
                     if (event.key === 'Escape') {
@@ -208,6 +219,7 @@
 
                   input.onkeydown = function (event) {
                     if (event.key === 'Enter' && input.value) {
+                      if (taskExists(input.value)) return
                       dispatch('UPDATE_TASK_NAME', event, { task, name: input.value })
                     }
                     if (event.key === 'Escape') {
@@ -243,6 +255,7 @@
                 return
               }
               if (event.key === 'Enter' && input.value) {
+                if (taskExists(input.value)) return
                 listItemRef.remove()
                 dispatch('CREATE_TASK', event, { name: input.value })
               }
@@ -288,6 +301,7 @@
 
                   input.onkeydown = function (event) {
                     if (event.key === 'Enter' && input.value) {
+                      if (subtaskExists(task, input.value)) return
                       dispatch('UPDATE_SUBTASK_NAME', event, { task, subtask, name: input.value })
                     }
                     if (event.key === 'Escape') {
