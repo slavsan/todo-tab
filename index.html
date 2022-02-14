@@ -116,20 +116,33 @@
           break
         case 'TASK_CHECKBOX_CHANGE': {
             const { task } = args
-            setTasks(tasks.map(t => ({ ...t, checked: t.name === task.name ? event.target.checked : t.checked })))
+            setTasks(tasks.map(t => {
+              if (t.name !== task.name) return t
+              const checked = event.target.checked
+              let subtasks = t.subtasks
+              if (checked) subtasks = subtasks.map(s => ({ ...s, checked: true }))
+              if (!checked) subtasks = subtasks.map(s => ({ ...s, checked: false }))
+              return {
+                ...t,
+                checked,
+                subtasks
+              }
+            }))
           }
           break
         case 'SUBTASK_CHECKBOX_CHANGE': {
             const { task, subtask } = args
             setTasks(tasks.map(t => {
               if (t.name !== task.name) return t
+              const subtasks = t.subtasks.map(s => {
+                if (s.name !== subtask.name) return s
+                const checked = event.target.checked
+                return { ...s, checked: checked }
+              })
               return {
                 ...t,
-                subtasks: t.subtasks.map(s => {
-                  if (s.name !== subtask.name) return s
-                  const checked = event.target.checked
-                  return { ...s, checked: checked }
-                })
+                checked: subtasks.every(s => s.checked),
+                subtasks
               }
             }))
           }
